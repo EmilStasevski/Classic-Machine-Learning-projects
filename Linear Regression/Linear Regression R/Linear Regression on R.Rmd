@@ -1,0 +1,487 @@
+---
+title: "Linear Regression R"
+author: "Staszewski"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### Loading libraries
+
+```{r, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(tidymodels)
+```
+
+### EDA & Data preparation
+
+
+```{r}
+df= read.csv("insurance.csv", stringsAsFactors = T)
+df %>% head()
+```
+
+```{r}
+df %>% colnames()
+```
+
+```{r}
+df %>% nrow()
+```
+
+Checking empty values
+
+```{r}
+sum(is.na(df) )
+```
+
+There are no empty values
+
+
+
+Settings for visualizations
+
+
+```{r}
+my_theme <- function(){
+  theme( 
+  
+  axis.title.x = element_text(size=12, face='bold'),
+  axis.title.y = element_text(size=12, face='bold'),
+  title =element_text(size=14, face='bold'),
+  axis.text.x = element_text( size=10),
+  axis.text.y = element_text( size=10)
+  
+  
+  
+)}
+```
+
+
+For measuring models performance I will use the most basic loss function -  mean squared error
+
+
+
+
+```{r}
+mse <- function(y_pred, y_true){
+  return(mean( (y_true - y_pred)^2    ))
+}
+```
+
+
+
+
+#### Exploring target
+
+
+```{r}
+
+df %>% 
+  ggplot(aes(x=  charges))+
+  geom_histogram(fill = "#f76b8a")+
+  theme_light()+
+  labs(y='Number of observations',x="The distribution of target - medical costs")+
+  my_theme()
+
+```
+
+
+
+
+
+```{r}
+train %>% 
+  ggplot(aes(y=charges))+
+  geom_boxplot(fill = "#f76b8a")+
+  theme_light()+
+  labs(title = 'Boxplot for target variable')+
+  my_theme()
+```
+
+The target's distribution is left-skewed, containing many outliers, that might worsen model's performance. I will return to this issue later.
+
+
+
+
+#### Numeric features
+
+
+```{r}
+library(corrplot)
+M <-cor(df %>% select(where(is.numeric)))
+corrplot(M, type="upper", order="hclust",
+        )
+```
+
+
+
+
+
+##### Age
+
+```{r}
+df %>% 
+  ggplot(aes(x= age, y = charges ))+
+  geom_point(color = "#f76b8a", size=3)+
+  geom_smooth(method = 'lm', size=3)+
+  theme_light()+
+  labs(x = "Customer's age", y="Customers spendings on medicine")+
+  my_theme()
+  
+```
+
+Does not really looks like it is a  linear dependence, let's try to raise age in power of two. In order to better assess decision I will use MSE value. 
+
+
+
+```{r}
+df$age_2 = df$age^2
+m0 = linear_reg() %>% fit(charges ~ age, data = df)
+m1 = linear_reg() %>% fit(charges ~ age_2, data = df)
+mse1 = mse(df$charges, predict(m0, df)$.pred  )
+mse2 = mse(df$charges, predict(m1, df)$.pred  )
+print(paste("Raising age in power of 2 MSE decreases " , round(mse1/mse2, 3), "times" ))
+```
+
+
+```{r}
+df %>% 
+  ggplot(aes(x= age_2, y = charges ))+
+  geom_point(color = "#f76b8a", size=3)+
+  geom_smooth(method = 'lm', size=3)+
+  theme_light()+
+  labs(x = "Customer's age in power of 2", y="Customers spendings on medicine")+
+  my_theme()
+```
+
+That looks better
+
+
+##### BMI
+
+
+```{r}
+df %>% 
+  ggplot(aes(x= bmi, y = charges ))+
+  geom_point(color = "#f76b8a", size=3)+
+  geom_smooth(method = 'lm', size=3)+
+  theme_light()+
+  labs(x = "Customer's body mass index", y="Customers spendings on medicine")+
+  my_theme()
+```
+
+
+
+
+
+Let's again experiment with powers
+
+
+
+```{r}
+df$bmi_03 = df$bmi^0.3
+m0 = linear_reg() %>% fit(charges ~ bmi, data = df)
+m1 = linear_reg() %>% fit(charges ~ bmi_03, data = df)
+mse1 = mse(df$charges, predict(m0, df)$.pred  )
+mse2 = mse(df$charges, predict(m1, df)$.pred  )
+mse1
+mse2
+```
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(x= bmi_03, y = charges ))+
+  geom_point(color = "#f76b8a", size=3)+
+  geom_smooth(method = 'lm', size=3)+
+  theme_light()+
+  labs(x = "Customer's body mass index in power of 0.3", y="Customers spendings on medicine")+
+  my_theme()
+```
+
+
+
+Not I will build first model, comparing its performance with naive mean prediction
+
+
+
+
+```{r}
+mse0 = mse(df$charges, mean(df$charges))
+print( paste("Naive mean prediction, MSE: ", mse0     ) )
+m0 = linear_reg() %>% fit(charges ~ bmi+ age, data=df)
+mse1 =  mse(df$charges,  predict(m0, df)$.pred )
+print(paste("Simle linear  model, MSE: ",  mse1))
+m1 = linear_reg() %>% fit(charges ~ bmi_03+ age_2, data=df)
+mse2 =  mse(df$charges,  predict(m1, df)$.pred )
+print(paste("Polymonial model, MSE: ",  mse2   ) )
+
+loss_df = data.frame(
+  model <- c("Mean prediction", "Age and bmi", "Age and bmi polymonial"),
+  loss_value <- c(mse0, mse1, mse2)
+)
+
+loss_df
+```
+
+
+
+
+
+
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(y= charges, x = as.factor(children )) )+
+  geom_boxplot(fill = "#f76b8a")+
+  theme_light()+
+  labs(x = "Number of client's children", y = "Client's medical spending")+
+  my_theme()
+```
+
+
+
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(y= charges, x = children ) )+
+  geom_point(size=3, color = "#f76b8a")+
+  geom_smooth(method = 'lm', size= 3)+
+  theme_light()+
+  labs(x = "Number of client's children", y = "Client's medical spending")+
+  my_theme()
+```
+
+
+
+
+
+
+
+```{r}
+mse(df$charges, mean(df$charges))
+
+
+
+m1 = linear_reg() %>% fit(charges ~ bmi_03+ age_2, data=df)
+mse(df$charges,  predict(m1, df)$.pred )
+
+
+m2 = linear_reg() %>% fit(charges ~ bmi_03+ age_2 + children, data=df)
+mse(df$charges,  predict(m2, df)$.pred )
+
+
+```
+
+
+##### Categorical features
+
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(y= charges, x = sex ) )+
+  geom_boxplot(fill = "#f76b8a")+
+  theme_light()+
+  my_theme()
+```
+
+
+
+
+```{r}
+df$sex_encoded = as.integer(df$sex)
+
+m2 = linear_reg() %>% fit(charges ~ bmi_03+ age_2+ children, data=df)
+mse(df$charges,  predict(m1, df)$.pred )
+
+
+m3 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          , data=df)
+mse(df$charges,  predict(m3, df)$.pred )
+
+
+```
+
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(y= charges, x = smoker ) )+
+  geom_boxplot(fill = "#f76b8a")+
+  theme_light()+
+  my_theme()
+```
+
+
+```{r}
+df$smoker_encoded <- as.integer(df$smoker)
+
+mse(df$charges, mean(df$charges))
+
+
+m3 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          , data=df)
+mse(df$charges,  predict(m3, df)$.pred )
+
+
+m4 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          + smoker_encoded
+                          , data=df)
+mse(df$charges,  predict(m4, df)$.pred )
+
+
+```
+
+
+
+
+
+
+```{r}
+df %>% 
+  ggplot(aes(y= charges, x = region ) )+
+  geom_boxplot(fill = "#f76b8a")+
+  theme_light()+
+  my_theme()
+```
+
+
+```{r}
+df$region_encoded<- as.integer(df$region)
+
+
+m4 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          + smoker_encoded
+                          , data=df)
+mse(df$charges,  predict(m4, df)$.pred )
+
+m5 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          + smoker_encoded
+                          + region_encoded
+                          , data=df)
+mse(df$charges,  predict(m5, df)$.pred )
+
+
+
+```
+
+
+### Building full model
+
+
+
+##### Train test split
+
+
+```{r}
+set.seed(42)
+
+split = initial_split(df, prop=0.75)
+train = training(split)
+test = testing(split)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+model0 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          + smoker_encoded
+                          + region_encoded
+                          , data=train)
+
+
+mse(train$charges,  predict(model0, train)$.pred)
+
+mse(test$charges,  predict(model0, test)$.pred)
+
+```
+
+
+Now let's try to get rid of outliers
+
+
+```{r}
+df$charges %>% summary()
+```
+
+
+```{r}
+IQR(df$charges) + quantile(df$charges, 0.75)
+```
+
+
+```{r}
+train %>% filter(charges > 28539.54) -> train
+test %>% filter(charges > 28539.54) -> test
+
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+model0 = linear_reg() %>% fit(charges ~ bmi_03
+                          + age_2 
+                          + children
+                          + sex_encoded
+                          + smoker_encoded
+                          + region_encoded
+                          , data=train)
+
+
+mse(train$charges,  predict(model0, train)$.pred)
+
+mse(test$charges,  predict(model0, test)$.pred)
+
+```
+
+Two times better!!!
+
+
+
+
+
