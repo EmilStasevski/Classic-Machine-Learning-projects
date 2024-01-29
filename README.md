@@ -1,5 +1,6 @@
 # Machine learning projects 
-This repository hosts the author's realized projects in classical Machine Learning on **Python**, **R**, and **Julia**, systematically partitioned into discrete tasks:
+This repository hosts the author's realized projects in classical Machine Learning on **Python** and
+**R**, systematically partitioned into discrete tasks:
  - Data Manipulation
  - Linear Regression
  - Linear Classification
